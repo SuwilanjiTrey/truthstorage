@@ -2,25 +2,27 @@
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet, SafeAreaView } from 'react-native';
 import { Colors, Sz, R } from '@/constants/Colors';
-import { DEVICE, STORAGE, formatBytes } from '@/utils/storage';
+import { formatBytes } from '@/utils/storage';
+import { useStorage } from '@/context/StorageContext';
 
 const PRINCIPLES = [
   'Read-only inspection. We never modify your data.',
   'No fake cleaning animations or misleading progress bars.',
   'We report what the kernel says, not what looks impressive.',
   'No background processes. No battery drain.',
-  'What you see is what\'s actually happening.',
+  "What you see is what's actually happening.",
 ];
 
 const APIs = [
-  { name: 'StatFs',               desc: 'Real partition usage from kernel' },
-  { name: 'StorageStatsManager',  desc: 'Per-app storage breakdown' },
-  { name: 'PackageManager',       desc: 'Installed app enumeration' },
-  { name: 'Build',                desc: 'Device & Android version info' },
+  { name: 'StatFs',              desc: 'Real partition usage from kernel' },
+  { name: 'StorageStatsManager', desc: 'Per-app storage breakdown' },
+  { name: 'PackageManager',      desc: 'Installed app enumeration' },
+  { name: 'Build',               desc: 'Device & Android version info' },
 ];
 
 export default function AboutScreen() {
-  const reportedGB = Math.round(DEVICE.reportedBytes / 1e9);
+  const { storage, device } = useStorage();
+  const reportedGB = Math.round(device.reportedBytes / 1e9);
 
   return (
     <SafeAreaView style={s.safe}>
@@ -54,14 +56,14 @@ export default function AboutScreen() {
         {/* Device */}
         <Label text="THIS DEVICE" />
         <View style={s.card}>
-          <KV k="MANUFACTURER" v={DEVICE.manufacturer} />
-          <KV k="MODEL"        v={DEVICE.model} />
-          <KV k="ANDROID"      v={`${DEVICE.androidVersion} (SDK ${DEVICE.sdkVersion})`} />
-          <KV k="TOTAL STORAGE"v={formatBytes(STORAGE.totalBytes)} />
-          <KV k="FREE"         v={formatBytes(STORAGE.freeBytes)} />
-          <KV k="ENCRYPTED"    v={DEVICE.isEncrypted ? 'YES' : 'NO'} vc={DEVICE.isEncrypted ? Colors.accent : Colors.danger} />
-          <KV k="ROOTED"       v={DEVICE.isRooted ? 'YES' : 'NO'}    vc={DEVICE.isRooted ? Colors.warning : Colors.textSecondary} />
-          <KV k="OEM REPORTED" v={`${reportedGB} GB`} last />
+          <KV k="MANUFACTURER"  v={device.manufacturer} />
+          <KV k="MODEL"         v={device.model} />
+          <KV k="ANDROID"       v={`${device.androidVersion} (SDK ${device.sdkVersion})`} />
+          <KV k="TOTAL STORAGE" v={formatBytes(storage.totalBytes)} />
+          <KV k="FREE"          v={formatBytes(storage.freeBytes)} />
+          <KV k="ENCRYPTED"     v={device.isEncrypted ? 'YES' : 'NO'} vc={device.isEncrypted ? Colors.accent : Colors.danger} />
+          <KV k="ROOTED"        v={device.isRooted    ? 'YES' : 'NO'} vc={device.isRooted    ? Colors.warning : Colors.textSecondary} />
+          <KV k="OEM REPORTED"  v={`${reportedGB} GB`} last />
         </View>
 
         {/* Why */}
@@ -77,7 +79,7 @@ export default function AboutScreen() {
           </Text>
         </View>
 
-        {/* APIs */}
+        {/* Data sources */}
         <Label text="DATA SOURCES" />
         <View style={s.card}>
           {APIs.map((a, i) => (
@@ -93,7 +95,8 @@ export default function AboutScreen() {
           <Text style={s.footerTxt}>MVVM · Clean Architecture · No tracking</Text>
           <View style={{ width: 40, height: 1, backgroundColor: Colors.bg3, marginVertical: Sz.md }} />
           <Text style={s.disclaimer}>
-            On a real Android device, TruthStorage requires the PACKAGE_USAGE_STATS permission to read per-app storage data. This must be granted manually in Settings → Special App Access → Usage Access.
+            TruthStorage requires the PACKAGE_USAGE_STATS permission to read per-app storage data.
+            Grant it in Settings → Special App Access → Usage Access.
           </Text>
         </View>
 
@@ -103,7 +106,11 @@ export default function AboutScreen() {
 }
 
 function Label({ text }: { text: string }) {
-  return <Text style={{ color: Colors.textMuted, fontSize: 9, fontFamily: 'SpaceMono', letterSpacing: 2, marginBottom: 8, marginTop: 4 }}>{text}</Text>;
+  return (
+    <Text style={{ color: Colors.textMuted, fontSize: 9, fontFamily: 'SpaceMono', letterSpacing: 2, marginBottom: 8, marginTop: 4 }}>
+      {text}
+    </Text>
+  );
 }
 
 function KV({ k, v, vc, last }: { k: string; v: string; vc?: string; last?: boolean }) {
@@ -122,27 +129,27 @@ const kv = StyleSheet.create({
 });
 
 const s = StyleSheet.create({
-  safe:       { flex: 1, backgroundColor: Colors.bg0 },
-  content:    { padding: Sz.md, paddingBottom: 40 },
-  hero:       { alignItems: 'center', paddingVertical: Sz.xl, marginBottom: Sz.sm },
-  logoOuter:  { width: 80, height: 80, alignItems: 'center', justifyContent: 'center', marginBottom: Sz.md },
-  logoInner:  { width: 68, height: 68, borderRadius: 34, backgroundColor: Colors.accentDim, borderWidth: 2, borderColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
-  logoTxt:    { color: Colors.accent, fontFamily: 'SpaceMono', fontWeight: '700', fontSize: 20, letterSpacing: 2 },
-  heroTitle:  { color: Colors.textPrimary, fontFamily: 'SpaceMono', fontSize: 22, fontWeight: '700', letterSpacing: -1 },
-  heroVersion:{ color: Colors.textMuted, fontFamily: 'SpaceMono', fontSize: 10, letterSpacing: 2, marginTop: 4, marginBottom: 12 },
-  heroTagline:{ color: Colors.textSecondary, fontFamily: 'SpaceMono', fontSize: 12, textAlign: 'center', lineHeight: 19 },
-  card:       { backgroundColor: Colors.bg1, borderRadius: R.lg, borderWidth: 1, borderColor: Colors.bg3, paddingHorizontal: Sz.md, marginBottom: Sz.md },
-  quoteCard:  { paddingVertical: Sz.md },
-  quoteLine:  { position: 'absolute', left: 0, top: Sz.md, bottom: Sz.md, width: 3, backgroundColor: Colors.accent, borderRadius: 2 },
-  quoteTxt:   { color: Colors.textSecondary, fontFamily: 'SpaceMono', fontSize: 12, lineHeight: 19 },
-  pRow:       { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 10, gap: 10 },
-  pBorder:    { borderBottomWidth: 1, borderBottomColor: Colors.bg3 },
-  pDot:       { color: Colors.accent, fontSize: 12, marginTop: 1 },
-  pTxt:       { flex: 1, color: Colors.textSecondary, fontFamily: 'SpaceMono', fontSize: 12, lineHeight: 18 },
-  apiRow:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
-  apiName:    { color: Colors.accent, fontFamily: 'SpaceMono', fontSize: 11 },
-  apiDesc:    { color: Colors.textSecondary, fontFamily: 'SpaceMono', fontSize: 11, flex: 1, textAlign: 'right' },
-  footer:     { marginTop: Sz.lg, alignItems: 'center' },
-  footerTxt:  { color: Colors.textMuted, fontFamily: 'SpaceMono', fontSize: 10, letterSpacing: 1, marginBottom: 2 },
-  disclaimer: { color: Colors.textMuted, fontFamily: 'SpaceMono', fontSize: 10, textAlign: 'center', lineHeight: 16, paddingHorizontal: Sz.md },
+  safe:        { flex: 1, backgroundColor: Colors.bg0 },
+  content:     { padding: Sz.md, paddingBottom: 40 },
+  hero:        { alignItems: 'center', paddingVertical: Sz.xl, marginBottom: Sz.sm },
+  logoOuter:   { width: 80, height: 80, alignItems: 'center', justifyContent: 'center', marginBottom: Sz.md },
+  logoInner:   { width: 68, height: 68, borderRadius: 34, backgroundColor: Colors.accentDim, borderWidth: 2, borderColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
+  logoTxt:     { color: Colors.accent, fontFamily: 'SpaceMono', fontWeight: '700', fontSize: 20, letterSpacing: 2 },
+  heroTitle:   { color: Colors.textPrimary, fontFamily: 'SpaceMono', fontSize: 22, fontWeight: '700', letterSpacing: -1 },
+  heroVersion: { color: Colors.textMuted, fontFamily: 'SpaceMono', fontSize: 10, letterSpacing: 2, marginTop: 4, marginBottom: 12 },
+  heroTagline: { color: Colors.textSecondary, fontFamily: 'SpaceMono', fontSize: 12, textAlign: 'center', lineHeight: 19 },
+  card:        { backgroundColor: Colors.bg1, borderRadius: R.lg, borderWidth: 1, borderColor: Colors.bg3, paddingHorizontal: Sz.md, marginBottom: Sz.md },
+  quoteCard:   { paddingVertical: Sz.md },
+  quoteLine:   { position: 'absolute', left: 0, top: Sz.md, bottom: Sz.md, width: 3, backgroundColor: Colors.accent, borderRadius: 2 },
+  quoteTxt:    { color: Colors.textSecondary, fontFamily: 'SpaceMono', fontSize: 12, lineHeight: 19 },
+  pRow:        { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 10, gap: 10 },
+  pBorder:     { borderBottomWidth: 1, borderBottomColor: Colors.bg3 },
+  pDot:        { color: Colors.accent, fontSize: 12, marginTop: 1 },
+  pTxt:        { flex: 1, color: Colors.textSecondary, fontFamily: 'SpaceMono', fontSize: 12, lineHeight: 18 },
+  apiRow:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
+  apiName:     { color: Colors.accent, fontFamily: 'SpaceMono', fontSize: 11 },
+  apiDesc:     { color: Colors.textSecondary, fontFamily: 'SpaceMono', fontSize: 11, flex: 1, textAlign: 'right' },
+  footer:      { marginTop: Sz.lg, alignItems: 'center' },
+  footerTxt:   { color: Colors.textMuted, fontFamily: 'SpaceMono', fontSize: 10, letterSpacing: 1, marginBottom: 2 },
+  disclaimer:  { color: Colors.textMuted, fontFamily: 'SpaceMono', fontSize: 10, textAlign: 'center', lineHeight: 16, paddingHorizontal: Sz.md },
 });

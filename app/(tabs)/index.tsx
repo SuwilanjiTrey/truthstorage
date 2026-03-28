@@ -1,21 +1,23 @@
-// app/(tabs)/index.tsx  ← replaces the default index.tsx
+// app/(tabs)/index.tsx
 import React, { useEffect, useRef } from 'react';
-import { View, Text, ScrollView, StyleSheet, Animated, SafeAreaView } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Animated, SafeAreaView, ActivityIndicator } from 'react-native';
 import StorageRing from '@/components/StorageRing';
 import { Colors, Sz, R } from '@/constants/Colors';
-import { STORAGE, DEVICE, APPS, formatBytes, usagePct, storageBreakdown } from '@/utils/storage';
+import { formatBytes, usagePct } from '@/utils/storage';
+import { useStorage } from '@/context/StorageContext';
 
 export default function HomeScreen() {
-  const { appsSize, cacheSize, systemSize } = storageBreakdown();
-  const reportedGB = Math.round(DEVICE.reportedBytes / 1e9);
-  const actualGB   = Math.round(STORAGE.totalBytes   / 1e9);
-  const mismatch   = reportedGB > actualGB + 4;
+  const { storage, device, loading, mismatch, appsSize, cacheSize, systemSize } = useStorage();
 
-  // Staggered entrance
+  const reportedGB = Math.round(device.reportedBytes / 1e9);
+  const actualGB   = Math.round(storage.totalBytes   / 1e9);
+
+  // Staggered entrance animations
   const anims = Array.from({ length: 5 }, () => ({
     op: useRef(new Animated.Value(0)).current,
     y:  useRef(new Animated.Value(16)).current,
   }));
+
   useEffect(() => {
     Animated.stagger(90, anims.map(a =>
       Animated.parallel([
@@ -23,13 +25,24 @@ export default function HomeScreen() {
         Animated.timing(a.y,  { toValue: 0, duration: 480, useNativeDriver: true }),
       ])
     )).start();
-  }, []);
+  }, [loading]); // re-trigger entrance when data loads
 
   const Row = ({ i, children, style }: any) => (
     <Animated.View style={[{ opacity: anims[i].op, transform: [{ translateY: anims[i].y }] }, style]}>
       {children}
     </Animated.View>
   );
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[s.safe, { alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator size="large" color={Colors.accent} />
+        <Text style={{ color: Colors.textSecondary, fontFamily: 'SpaceMono', fontSize: 11, marginTop: 12 }}>
+          READING STORAGE...
+        </Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={s.safe}>
@@ -39,15 +52,17 @@ export default function HomeScreen() {
         <Row i={0} style={s.header}>
           <Text style={s.eyebrow}>DIAGNOSTIC REPORT</Text>
           <Text style={s.title}>Storage</Text>
-          <Text style={s.sub}>{DEVICE.manufacturer} {DEVICE.model} · Android {DEVICE.androidVersion}</Text>
+          <Text style={s.sub}>
+            {device.manufacturer} {device.model} · Android {device.androidVersion}
+          </Text>
         </Row>
 
         {/* Ring */}
         <Row i={1} style={{ alignItems: 'center', marginBottom: Sz.xl }}>
-          <StorageRing totalBytes={STORAGE.totalBytes} usedBytes={STORAGE.usedBytes} size={230} />
+          <StorageRing totalBytes={storage.totalBytes} usedBytes={storage.usedBytes} size={230} />
         </Row>
 
-        {/* OEM warning */}
+        {/* OEM mismatch warning */}
         {mismatch && (
           <Row i={2}>
             <View style={s.warnBanner}>
@@ -60,31 +75,43 @@ export default function HomeScreen() {
           </Row>
         )}
 
-        {/* Cards row */}
+        {/* Used / Free cards */}
         <Row i={2} style={s.cardRow}>
-          <MiniCard label="USED"  value={formatBytes(STORAGE.usedBytes)}  sub={`${usagePct(STORAGE.usedBytes, STORAGE.totalBytes)}% of disk`} color={Colors.accent} />
+          <MiniCard
+            label="USED"
+            value={formatBytes(storage.usedBytes)}
+            sub={`${usagePct(storage.usedBytes, storage.totalBytes)}% of disk`}
+            color={Colors.accent}
+          />
           <View style={{ width: Sz.sm }} />
-          <MiniCard label="FREE"  value={formatBytes(STORAGE.freeBytes)}  sub="Available now"  color="#4FC3F7" />
+          <MiniCard
+            label="FREE"
+            value={formatBytes(storage.freeBytes)}
+            sub="Available now"
+            color="#4FC3F7"
+          />
         </Row>
 
         {/* Breakdown */}
         <Row i={3}>
           <Label text="BREAKDOWN" />
           <View style={s.card}>
-            <BarRow label="System"     bytes={systemSize} total={STORAGE.usedBytes} color="#9575CD" />
-            <BarRow label="Apps+Data"  bytes={appsSize}   total={STORAGE.usedBytes} color={Colors.accent} />
-            <BarRow label="Cache"      bytes={cacheSize}  total={STORAGE.usedBytes} color={Colors.warning} last />
+            <BarRow label="System"    bytes={systemSize} total={storage.usedBytes} color="#9575CD" />
+            <BarRow label="Apps+Data" bytes={appsSize}   total={storage.usedBytes} color={Colors.accent} />
+            <BarRow label="Cache"     bytes={cacheSize}  total={storage.usedBytes} color={Colors.warning} last />
           </View>
         </Row>
 
-        {/* Device */}
+        {/* Device info */}
         <Row i={4}>
           <Label text="DEVICE" />
           <View style={s.card}>
-            <KV k="ANDROID"   v={`${DEVICE.androidVersion} (SDK ${DEVICE.sdkVersion})`} />
-            <KV k="ENCRYPTED" v={DEVICE.isEncrypted ? 'YES' : 'NO'} vc={DEVICE.isEncrypted ? Colors.accent : Colors.danger} />
-            <KV k="ROOTED"    v={DEVICE.isRooted    ? 'YES' : 'NO'} vc={DEVICE.isRooted    ? Colors.warning : Colors.textSecondary} />
-            <KV k="REPORTED"  v={`${reportedGB} GB`} last />
+            <KV k="MANUFACTURER" v={device.manufacturer} />
+            <KV k="MODEL"        v={device.model} />
+            <KV k="ANDROID"      v={`${device.androidVersion} (SDK ${device.sdkVersion})`} />
+            <KV k="ENCRYPTED"    v={device.isEncrypted ? 'YES' : 'NO'} vc={device.isEncrypted ? Colors.accent : Colors.danger} />
+            <KV k="ROOTED"       v={device.isRooted    ? 'YES' : 'NO'} vc={device.isRooted    ? Colors.warning : Colors.textSecondary} />
+            <KV k="REPORTED"     v={`${reportedGB} GB`} last />
           </View>
         </Row>
 
@@ -93,13 +120,19 @@ export default function HomeScreen() {
   );
 }
 
+// ── Sub-components ────────────────────────────────────────────────────────────
+
 function Label({ text }: { text: string }) {
-  return <Text style={{ color: Colors.textMuted, fontSize: 9, fontFamily: 'SpaceMono', letterSpacing: 2, marginBottom: 8, marginTop: 4 }}>{text}</Text>;
+  return (
+    <Text style={{ color: Colors.textMuted, fontSize: 9, fontFamily: 'SpaceMono', letterSpacing: 2, marginBottom: 8, marginTop: 4 }}>
+      {text}
+    </Text>
+  );
 }
 
 function MiniCard({ label, value, sub, color }: any) {
   return (
-    <View style={[mc.card]}>
+    <View style={mc.card}>
       <View style={[mc.bar, { backgroundColor: color }]} />
       <View style={mc.body}>
         <Text style={mc.label}>{label}</Text>
@@ -124,7 +157,9 @@ function BarRow({ label, bytes, total, color, last }: any) {
     <View style={[br.row, !last && br.border]}>
       <View style={[br.dot, { backgroundColor: color }]} />
       <Text style={br.label}>{label}</Text>
-      <View style={br.track}><View style={[br.fill, { width: `${pct}%`, backgroundColor: color }]} /></View>
+      <View style={br.track}>
+        <View style={[br.fill, { width: `${pct}%`, backgroundColor: color }]} />
+      </View>
       <Text style={br.val}>{formatBytes(bytes)}</Text>
     </View>
   );

@@ -2,33 +2,36 @@
 import React, { useState, useMemo } from 'react';
 import {
   View, Text, TextInput, FlatList, StyleSheet,
-  SafeAreaView, TouchableOpacity, Modal, ScrollView,
+  SafeAreaView, TouchableOpacity, Modal, ScrollView, ActivityIndicator,
 } from 'react-native';
 import AppListItem from '@/components/AppListItem';
 import { Colors, Sz, R } from '@/constants/Colors';
-import { APPS, AppInfo, formatBytes, totalSize } from '@/utils/storage';
+import { AppInfo, formatBytes, totalSize } from '@/utils/storage';
+import { useStorage } from '@/context/StorageContext';
 
 type Sort = 'total' | 'data' | 'cache' | 'app';
 
 export default function AppsScreen() {
+  const { apps, loading } = useStorage();
+
   const [query,    setQuery]    = useState('');
   const [sort,     setSort]     = useState<Sort>('total');
   const [selected, setSelected] = useState<AppInfo | null>(null);
 
   const filtered = useMemo(() => {
-    let apps = [...APPS];
-    if (query.trim()) apps = apps.filter(a => a.appName.toLowerCase().includes(query.toLowerCase()));
-    apps.sort((a, b) => {
+    let list = [...apps];
+    if (query.trim()) list = list.filter(a => a.appName.toLowerCase().includes(query.toLowerCase()));
+    list.sort((a, b) => {
       if (sort === 'total') return totalSize(b) - totalSize(a);
       if (sort === 'data')  return b.dataBytes  - a.dataBytes;
       if (sort === 'cache') return b.cacheBytes - a.cacheBytes;
       return b.appBytes - a.appBytes;
     });
-    return apps;
-  }, [query, sort]);
+    return list;
+  }, [apps, query, sort]);
 
-  const maxBytes = useMemo(() => Math.max(...APPS.map(totalSize)), []);
-  const grandTotal = APPS.reduce((s, a) => s + totalSize(a), 0);
+  const maxBytes   = useMemo(() => apps.length > 0 ? Math.max(...apps.map(totalSize)) : 1, [apps]);
+  const grandTotal = apps.reduce((s, a) => s + totalSize(a), 0);
 
   const SORTS: { k: Sort; l: string }[] = [
     { k: 'total', l: 'Total' }, { k: 'data', l: 'Data' },
@@ -43,58 +46,86 @@ export default function AppsScreen() {
         <Text style={s.eyebrow}>INSTALLED APPS</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <Text style={s.title}>Apps</Text>
-          <View style={s.badge}><Text style={s.badgeTxt}>{APPS.length} apps</Text></View>
-        </View>
-        <Text style={s.sub}>Total: {formatBytes(grandTotal)}</Text>
-      </View>
-
-      {/* Search */}
-      <View style={s.searchRow}>
-        <Text style={{ color: Colors.textMuted, fontSize: 16, marginRight: 6 }}>⌕</Text>
-        <TextInput
-          style={s.input}
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search apps..."
-          placeholderTextColor={Colors.textMuted}
-        />
-        {query.length > 0 &&
-          <TouchableOpacity onPress={() => setQuery('')}>
-            <Text style={{ color: Colors.textMuted, fontSize: 14, padding: 4 }}>✕</Text>
-          </TouchableOpacity>
-        }
-      </View>
-
-      {/* Sort chips */}
-      <View style={s.sortRow}>
-        <Text style={s.sortLabel}>SORT</Text>
-        {SORTS.map(o => (
-          <TouchableOpacity
-            key={o.k}
-            style={[s.chip, sort === o.k && s.chipOn]}
-            onPress={() => setSort(o.k)}
-          >
-            <Text style={[s.chipTxt, sort === o.k && s.chipTxtOn]}>{o.l}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* List */}
-      <FlatList
-        data={filtered}
-        keyExtractor={a => a.packageName}
-        renderItem={({ item }) => (
-          <AppListItem app={item} maxBytes={maxBytes} onPress={() => setSelected(item)} />
-        )}
-        ListEmptyComponent={
-          <View style={{ padding: 40, alignItems: 'center' }}>
-            <Text style={{ color: Colors.textMuted, fontFamily: 'SpaceMono', fontSize: 12 }}>
-              No apps match "{query}"
-            </Text>
+          <View style={s.badge}>
+            <Text style={s.badgeTxt}>{loading ? '…' : `${apps.length} apps`}</Text>
           </View>
-        }
-        showsVerticalScrollIndicator={false}
-      />
+        </View>
+        <Text style={s.sub}>
+          {loading ? 'Loading...' : `Total: ${formatBytes(grandTotal)}`}
+        </Text>
+      </View>
+
+      {loading ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color={Colors.accent} />
+          <Text style={{ color: Colors.textSecondary, fontFamily: 'SpaceMono', fontSize: 11, marginTop: 12 }}>
+            READING APP STORAGE...
+          </Text>
+          <Text style={{ color: Colors.textMuted, fontFamily: 'SpaceMono', fontSize: 10, marginTop: 6 }}>
+            Requires Usage Access permission
+          </Text>
+        </View>
+      ) : (
+        <>
+          {/* Search */}
+          <View style={s.searchRow}>
+            <Text style={{ color: Colors.textMuted, fontSize: 16, marginRight: 6 }}>⌕</Text>
+            <TextInput
+              style={s.input}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search apps..."
+              placeholderTextColor={Colors.textMuted}
+            />
+            {query.length > 0 &&
+              <TouchableOpacity onPress={() => setQuery('')}>
+                <Text style={{ color: Colors.textMuted, fontSize: 14, padding: 4 }}>✕</Text>
+              </TouchableOpacity>
+            }
+          </View>
+
+          {/* Sort chips */}
+          <View style={s.sortRow}>
+            <Text style={s.sortLabel}>SORT</Text>
+            {SORTS.map(o => (
+              <TouchableOpacity
+                key={o.k}
+                style={[s.chip, sort === o.k && s.chipOn]}
+                onPress={() => setSort(o.k)}
+              >
+                <Text style={[s.chipTxt, sort === o.k && s.chipTxtOn]}>{o.l}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Empty state — likely missing Usage Access */}
+          {apps.length === 0 ? (
+            <View style={s.emptyState}>
+              <Text style={s.emptyTitle}>No app data</Text>
+              <Text style={s.emptyDesc}>
+                Grant Usage Access permission to see per-app storage.{'\n\n'}
+                Settings → Apps → Special App Access{'\n'}→ Usage Access → TruthStorage → Enable
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={filtered}
+              keyExtractor={a => a.packageName}
+              renderItem={({ item }) => (
+                <AppListItem app={item} maxBytes={maxBytes} onPress={() => setSelected(item)} />
+              )}
+              ListEmptyComponent={
+                <View style={{ padding: 40, alignItems: 'center' }}>
+                  <Text style={{ color: Colors.textMuted, fontFamily: 'SpaceMono', fontSize: 12 }}>
+                    No apps match "{query}"
+                  </Text>
+                </View>
+              }
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+        </>
+      )}
 
       {/* Detail modal */}
       <Modal visible={!!selected} transparent animationType="slide" onRequestClose={() => setSelected(null)}>
@@ -122,18 +153,15 @@ function Detail({ app, onClose }: { app: AppInfo; onClose: () => void }) {
           <Text style={{ color: Colors.textSecondary, fontSize: 16 }}>✕</Text>
         </TouchableOpacity>
       </View>
-
       <View style={d.totalRow}>
         <Text style={d.totalLabel}>TOTAL SIZE</Text>
         <Text style={d.totalVal}>{formatBytes(total)}</Text>
       </View>
-
       <View style={{ paddingHorizontal: Sz.md, paddingTop: Sz.md }}>
         <DRow label="App (APK/OBB)"  bytes={app.appBytes}   color={Colors.accent} />
         <DRow label="User Data"      bytes={app.dataBytes}  color={Colors.warning} />
         <DRow label="Cache"          bytes={app.cacheBytes} color={Colors.textSecondary} last />
       </View>
-
       <View style={d.note}>
         <Text style={d.noteTxt}>
           ℹ  Cache can be cleared in Android Settings → Apps → {app.appName} → Storage.
@@ -171,21 +199,24 @@ const d = StyleSheet.create({
 });
 
 const s = StyleSheet.create({
-  safe:      { flex: 1, backgroundColor: Colors.bg0 },
-  header:    { paddingHorizontal: Sz.md, paddingTop: Sz.md, paddingBottom: Sz.sm },
-  eyebrow:   { color: Colors.accent, fontSize: 9, fontFamily: 'SpaceMono', letterSpacing: 2.5, marginBottom: 4 },
-  title:     { color: Colors.textPrimary, fontSize: 28, fontWeight: '700', fontFamily: 'SpaceMono', letterSpacing: -1 },
-  badge:     { backgroundColor: Colors.accentDim, borderRadius: R.full, paddingHorizontal: 10, paddingVertical: 3, borderWidth: 1, borderColor: Colors.accentMid },
-  badgeTxt:  { color: Colors.accent, fontSize: 10, fontFamily: 'SpaceMono' },
-  sub:       { color: Colors.textSecondary, fontSize: 11, fontFamily: 'SpaceMono', marginTop: 2 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.bg1, borderRadius: R.md, borderWidth: 1, borderColor: Colors.bg3, marginHorizontal: Sz.md, marginBottom: Sz.sm, paddingHorizontal: Sz.sm, height: 44 },
-  input:     { flex: 1, color: Colors.textPrimary, fontFamily: 'SpaceMono', fontSize: 13 },
-  sortRow:   { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Sz.md, gap: 6, marginBottom: Sz.sm },
-  sortLabel: { color: Colors.textMuted, fontSize: 9, fontFamily: 'SpaceMono', letterSpacing: 1.5 },
-  chip:      { paddingHorizontal: 10, paddingVertical: 4, borderRadius: R.full, backgroundColor: Colors.bg1, borderWidth: 1, borderColor: Colors.bg3 },
-  chipOn:    { backgroundColor: Colors.accentDim, borderColor: Colors.accentMid },
-  chipTxt:   { color: Colors.textMuted, fontSize: 11, fontFamily: 'SpaceMono' },
-  chipTxtOn: { color: Colors.accent },
-  overlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  sheet:     { backgroundColor: Colors.bg1, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, borderColor: Colors.bg3, paddingBottom: 40, maxHeight: '80%' },
+  safe:       { flex: 1, backgroundColor: Colors.bg0 },
+  header:     { paddingHorizontal: Sz.md, paddingTop: Sz.md, paddingBottom: Sz.sm },
+  eyebrow:    { color: Colors.accent, fontSize: 9, fontFamily: 'SpaceMono', letterSpacing: 2.5, marginBottom: 4 },
+  title:      { color: Colors.textPrimary, fontSize: 28, fontWeight: '700', fontFamily: 'SpaceMono', letterSpacing: -1 },
+  badge:      { backgroundColor: Colors.accentDim, borderRadius: R.full, paddingHorizontal: 10, paddingVertical: 3, borderWidth: 1, borderColor: Colors.accentMid },
+  badgeTxt:   { color: Colors.accent, fontSize: 10, fontFamily: 'SpaceMono' },
+  sub:        { color: Colors.textSecondary, fontSize: 11, fontFamily: 'SpaceMono', marginTop: 2 },
+  searchRow:  { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.bg1, borderRadius: R.md, borderWidth: 1, borderColor: Colors.bg3, marginHorizontal: Sz.md, marginBottom: Sz.sm, paddingHorizontal: Sz.sm, height: 44 },
+  input:      { flex: 1, color: Colors.textPrimary, fontFamily: 'SpaceMono', fontSize: 13 },
+  sortRow:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Sz.md, gap: 6, marginBottom: Sz.sm },
+  sortLabel:  { color: Colors.textMuted, fontSize: 9, fontFamily: 'SpaceMono', letterSpacing: 1.5 },
+  chip:       { paddingHorizontal: 10, paddingVertical: 4, borderRadius: R.full, backgroundColor: Colors.bg1, borderWidth: 1, borderColor: Colors.bg3 },
+  chipOn:     { backgroundColor: Colors.accentDim, borderColor: Colors.accentMid },
+  chipTxt:    { color: Colors.textMuted, fontSize: 11, fontFamily: 'SpaceMono' },
+  chipTxtOn:  { color: Colors.accent },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Sz.xl },
+  emptyTitle: { color: Colors.textSecondary, fontFamily: 'SpaceMono', fontSize: 16, fontWeight: '700', marginBottom: 12 },
+  emptyDesc:  { color: Colors.textMuted, fontFamily: 'SpaceMono', fontSize: 11, textAlign: 'center', lineHeight: 18 },
+  overlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  sheet:      { backgroundColor: Colors.bg1, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, borderColor: Colors.bg3, paddingBottom: 40, maxHeight: '80%' },
 });
